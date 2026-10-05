@@ -1,0 +1,119 @@
+import * as cdk from 'aws-cdk-lib';
+import { Construct } from 'constructs';
+
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+
+export class CdkProjectStack extends cdk.Stack {
+
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+
+    super(scope, id, props);
+
+   
+    //  DynamoDB Table
+
+
+    const table = new dynamodb.Table(this, 'ItemsTable', {
+
+      partitionKey: {
+        name: 'id',
+        type: dynamodb.AttributeType.STRING
+      },
+
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+
+      removalPolicy: cdk.RemovalPolicy.DESTROY
+    });
+
+
+   
+    //  Lambda Function
+   
+
+    const lambdaFunction = new lambda.Function(this, 'ItemsLambda', {
+
+      runtime: lambda.Runtime.PYTHON_3_12,
+
+      handler: 'handler.handler',
+
+      code: lambda.Code.fromAsset('lambda'),
+
+      environment: {
+        TABLE_NAME: table.tableName
+      }
+    });
+
+
+   
+    // Lambda permission to access DynamoDB
+  
+
+    table.grantReadWriteData(lambdaFunction);
+
+
+   
+    //  API Gateway REST API
+   
+
+    const api = new apigateway.RestApi(this, 'ItemsApi', {
+
+      restApiName: 'Serverless Items API',
+
+      description: 'REST API using API Gateway, Lambda and DynamoDB',
+
+      deployOptions: {
+        stageName: 'prod'
+      }
+    });
+
+
+   
+    // Connect API Gateway to Lambda
+   
+
+    const lambdaIntegration =
+      new apigateway.LambdaIntegration(lambdaFunction);
+
+
+    
+    // Create /items resource
+   
+
+    const items = api.root.addResource('items');
+
+
+    // GET /items
+
+    items.addMethod(
+      'GET',
+      lambdaIntegration
+    );
+
+
+    // POST /items
+
+    items.addMethod(
+      'POST',
+      lambdaIntegration
+    );
+
+
+    
+    // CloudFormation Outputs
+   
+
+    new cdk.CfnOutput(this, 'ApiUrl', {
+      value: api.url
+    });
+
+    new cdk.CfnOutput(this, 'DynamoDBTableName', {
+      value: table.tableName
+    });
+
+    new cdk.CfnOutput(this, 'LambdaFunctionName', {
+      value: lambdaFunction.functionName
+    });
+  }
+}
